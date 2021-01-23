@@ -3,7 +3,7 @@ The injector merely mimics the common strategy for injecting DLL in Windows appl
 
 
 # Steps
-1. Suspend the process.
+1. Attach to the injected process.
 2. Save current state (registers and such).
 3. Write a `.so` path to a R/W memory area.
 5. Place `dlopen()` arguments on the corresponding registers.

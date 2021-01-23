@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -6,6 +7,8 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <stdarg.h>
+#include <dlfcn.h>
+#include <stdint.h>
 
 #define ERR_EXIT(errmsg)    \
     {                       \
@@ -59,7 +62,6 @@ void *search_maps(int count, ...)
         }
         if (idx == count)
         {
-            printf("Found map: %s", line);
             ret = strstr(line, "-") - line;
             strncpy(addr_str, line, ret);
             break;
@@ -78,7 +80,14 @@ void *get_rw_mem()
 
 void *get_dlopen()
 {
-    void *libc = search_maps(2, "r-xp", "libc");
+    Dl_info ldso;
+    void *libdl;
+    unsigned int dlopen_offset;
+
+    libdl = search_maps(2, "r-xp", "libdl");
+    dladdr(dlopen, &ldso);
+    dlopen_offset = (uintptr_t)dlopen - (uintptr_t)ldso.dli_fbase;
+    return libdl + dlopen_offset;
 }
 void inject_so_path()
 {
@@ -91,5 +100,6 @@ int main()
     injected_proc = 1;
     // attach_injected_proc();
     // save_state();
-    inject_so_path();
+    // inject_so_path();
+    // get_dlopen();
 }
