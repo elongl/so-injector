@@ -4,6 +4,8 @@
 #include <string.h>
 #include <sys/ptrace.h>
 #include <sys/user.h>
+#include <sys/wait.h>
+#include <stdarg.h>
 
 #define ERR_EXIT(errmsg)    \
     {                       \
@@ -20,6 +22,7 @@ void attach_injected_proc()
 {
     if (ptrace(PTRACE_ATTACH, injected_proc))
         ERR_EXIT("PTRACE_ATTACH");
+    waitpid(injected_proc, NULL, 0);
 }
 
 void save_state()
@@ -28,42 +31,65 @@ void save_state()
         ERR_EXIT("PTRACE_GETREGS");
 }
 
-void *get_rw_mem()
+void *search_maps(int count, ...)
 {
-    int ret;
-    char *line = NULL;
+    int ret, idx;
+    char *substr, *line = NULL;
     char addr_str[16] = {};
     char maps_path[255];
     FILE *maps;
     size_t len = 0;
-    ssize_t read;
+    va_list substrs;
 
     sprintf(maps_path, "/proc/%u/maps", injected_proc);
     if (!(maps = fopen(maps_path, "r")))
         ERR_EXIT("fopen");
 
-    while ((ret = getline(&line, &len, maps)) != -1)
+    while (getline(&line, &len, maps) != -1)
     {
-        if (strstr(line, "rw-p"))
+        va_start(substrs, count);
+        idx = 0;
+
+        while (idx != count)
         {
-            puts(line);
+            substr = va_arg(substrs, char *);
+            if (!strstr(line, substr))
+                break;
+            idx++;
+        }
+        if (idx == count)
+        {
+            printf("Found map: %s", line);
             ret = strstr(line, "-") - line;
             strncpy(addr_str, line, ret);
             break;
         }
     }
+
     fclose(maps);
     free(line);
-    return (void*)strtol(addr_str, NULL, 16);
+    return (void *)strtol(addr_str, NULL, 16);
+}
+
+void *get_rw_mem()
+{
+    return search_maps(1, "rw-p");
+}
+
+void *get_dlopen()
+{
+    void *libc = search_maps(2, "r-xp", "libc");
 }
 void inject_so_path()
 {
-    void* rw_mem = get_rw_mem();
-    printf("Injecting .so path to %p\n", rw_mem);
+    printf("Injecting .so path to %p\n", get_rw_mem());
+    printf("dlopen() @ %p\n", get_dlopen());
 }
 
 int main()
 {
     injected_proc = 1;
+    // attach_injected_proc();
+    // save_state();
     inject_so_path();
 }
